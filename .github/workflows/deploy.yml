@@ -1,0 +1,175 @@
+name: Deploy LLMServer
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest  # GitHub-hosted runner에서 빌드
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/behindy-llmserver:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/behindy-llmserver:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/behindy-llmserver:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/behindy-llmserver:buildcache,mode=max
+
+      - name: Image digest
+        run: echo "Image pushed successfully"
+
+  deploy:
+    runs-on: self-hosted
+    needs: build
+
+    steps:
+      - name: Login to DockerHub
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Pull latest image
+        run: |
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/behindy-llmserver:latest
+          echo "Image pulled successfully"
+
+      - name: Determine deployment color
+        id: color
+        run: |
+          cd ~/behindy-ops
+          if docker ps --filter "name=^llmserver$" --format "{{.Names}}" | grep -q "^llmserver$"; then
+            echo "current=blue" >> $GITHUB_OUTPUT
+            echo "target=green" >> $GITHUB_OUTPUT
+            echo "target_container=llmserver-green" >> $GITHUB_OUTPUT
+          else
+            echo "current=green" >> $GITHUB_OUTPUT
+            echo "target=blue" >> $GITHUB_OUTPUT
+            echo "target_container=llmserver" >> $GITHUB_OUTPUT
+          fi
+          echo "Current: $(cat $GITHUB_OUTPUT | grep current | cut -d= -f2)"
+          echo "Target: $(cat $GITHUB_OUTPUT | grep target | cut -d= -f2)"
+
+      - name: Start new container (Green deployment)
+        run: |
+          cd ~/behindy-ops
+          # 환경변수 로드
+          set -a
+          source .env
+          set +a
+
+          # Green 컨테이너 시작
+          docker run -d \
+            --name ${{ steps.color.outputs.target_container }} \
+            --network behindy-ops_internal \
+            --restart always \
+            -e AI_PROVIDER="${AI_PROVIDER:-openai}" \
+            -e OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
+            -e OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}" \
+            -e OPENAI_MAX_TOKENS="${OPENAI_MAX_TOKENS:-2000}" \
+            -e CLAUDE_API_KEY="${CLAUDE_API_KEY:-}" \
+            -e CLAUDE_MODEL="${CLAUDE_MODEL:-claude-3-haiku-20240307}" \
+            -e REQUEST_LIMIT_PER_HOUR="${REQUEST_LIMIT_PER_HOUR:-50}" \
+            -e REQUEST_LIMIT_PER_DAY="${REQUEST_LIMIT_PER_DAY:-500}" \
+            -e USE_CACHE="${USE_CACHE:-true}" \
+            -e CACHE_TTL="${CACHE_TTL:-7200}" \
+            -e REDIS_URL=redis://redis:6379 \
+            -e LOG_LEVEL="${LOG_LEVEL:-INFO}" \
+            -e TZ=Asia/Seoul \
+            -v /etc/localtime:/etc/localtime:ro \
+            -v /etc/timezone:/etc/timezone:ro \
+            ${{ secrets.DOCKERHUB_USERNAME }}/behindy-llmserver:latest
+          echo "New container started: ${{ steps.color.outputs.target_container }}"
+
+      - name: Wait for service
+        run: |
+          echo "Waiting for ${{ steps.color.outputs.target_container }} to start..."
+          sleep 20
+
+      - name: Health check (internal)
+        run: |
+          echo "Running internal health check for ${{ steps.color.outputs.target_container }}..."
+          for i in {1..15}; do
+            if docker exec nginx curl -sf http://${{ steps.color.outputs.target_container }}:8000/health >/dev/null 2>&1; then
+              echo "✓ ${{ steps.color.outputs.target_container }} is responding internally"
+              break
+            fi
+            echo "Waiting for internal health... ($i/15)"
+            sleep 4
+          done
+
+      - name: Switch Nginx upstream
+        run: |
+          cd ~/behindy-ops
+          echo "Switching to route traffic to ${{ steps.color.outputs.target_container }}..."
+
+          if [ "${{ steps.color.outputs.target }}" = "green" ]; then
+            docker rename llmserver llmserver-blue 2>/dev/null || true
+            docker rename llmserver-green llmserver
+            echo "✓ Switched to Green deployment"
+          else
+            docker rename llmserver-green llmserver-blue 2>/dev/null || true
+            docker rename llmserver-blue llmserver 2>/dev/null || true
+            echo "✓ Switched to Blue deployment"
+          fi
+
+      - name: Health check (external via Backend proxy)
+        run: |
+          echo "Running external health check via https://behindy.me..."
+          sleep 5
+          for i in {1..10}; do
+            if curl -s https://behindy.me/api/ai-stories/health | grep -q "success"; then
+              echo "✓ LLMServer is healthy (via Backend proxy)"
+              break
+            fi
+            echo "Waiting for external health... ($i/10)"
+            sleep 4
+          done
+
+      - name: Stop old container
+        run: |
+          echo "Stopping old container..."
+          if [ "${{ steps.color.outputs.current }}" = "blue" ]; then
+            docker stop llmserver-blue 2>/dev/null || true
+            docker rm llmserver-blue 2>/dev/null || true
+            echo "✓ Old blue container stopped"
+          else
+            docker stop llmserver-green 2>/dev/null || true
+            docker rm llmserver-green 2>/dev/null || true
+            echo "✓ Old green container stopped"
+          fi
+
+      - name: Cleanup old images
+        run: |
+          echo "Cleaning up old llmserver images..."
+          # 현재 프로젝트의 이미지만 필터링하여 최신 2개 제외하고 삭제
+          docker images ${{ secrets.DOCKERHUB_USERNAME }}/behindy-llmserver --format "{{.ID}} {{.CreatedAt}}" | \
+            sort -rk 2 | \
+            awk 'NR>2 {print $1}' | \
+            xargs -r docker rmi -f || true
+          # dangling 이미지 정리
+          docker image prune -f
+          echo "Old images cleaned up"
+
+      - name: Display status
+        run: |
+          echo "=== Deployment Summary ==="
+          docker ps --filter "name=llmserver" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          echo ""
+          echo "LLMServer deployed successfully!"
