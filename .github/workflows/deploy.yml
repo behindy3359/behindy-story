@@ -128,13 +128,26 @@ jobs:
           cd ~/behindy-ops
           echo "Switching to route traffic to ${{ steps.color.outputs.target_container }}..."
 
+          cleanup_container() {
+            local name="$1"
+            if docker ps -a --format '{{.Names}}' | grep -Fxq "$name"; then
+              docker rm -f "$name"
+            fi
+          }
+
           if [ "${{ steps.color.outputs.target }}" = "green" ]; then
-            docker rename llmserver llmserver-blue 2>/dev/null || true
+            cleanup_container llmserver-blue
+            if docker ps -a --format '{{.Names}}' | grep -Fxq llmserver; then
+              docker rename llmserver llmserver-blue
+            fi
             docker rename llmserver-green llmserver
             echo "✓ Switched to Green deployment"
           else
-            docker rename llmserver-green llmserver-blue 2>/dev/null || true
-            docker rename llmserver-blue llmserver 2>/dev/null || true
+            cleanup_container llmserver-green
+            if docker ps -a --format '{{.Names}}' | grep -Fxq llmserver; then
+              docker rename llmserver llmserver-green
+            fi
+            docker rename llmserver-blue llmserver
             echo "✓ Switched to Blue deployment"
           fi
 
