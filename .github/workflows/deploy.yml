@@ -50,6 +50,15 @@ jobs:
           docker pull ${{ secrets.DOCKER_USERNAME }}/behindy-llmserver:latest
           echo "Image pulled successfully"
 
+      - name: Sync ops repository
+        run: |
+          if [ ! -d ~/behindy-ops/.git ]; then
+            echo "behindy-ops repository not found"
+            exit 1
+          fi
+          cd ~/behindy-ops
+          git pull --ff-only
+
       - name: Determine deployment color
         id: color
         run: |
