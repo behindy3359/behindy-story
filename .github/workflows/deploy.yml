@@ -84,6 +84,9 @@ jobs:
           set +a
 
           # Green 컨테이너 시작
+          if docker ps -a --format '{{.Names}}' | grep -Fxq "${{ steps.color.outputs.target_container }}"; then
+            docker rm -f "${{ steps.color.outputs.target_container }}"
+          fi
           docker run -d \
             --name ${{ steps.color.outputs.target_container }} \
             --network behindy-ops_internal \
