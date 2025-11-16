@@ -8,7 +8,6 @@
 - **Language**: Python 3.11
 - **LLM Providers**: OpenAI, Anthropic Claude
 - **Cache**: Redis
-- **Testing**: Pytest
 
 ## 주요 기능
 
@@ -35,26 +34,28 @@
 
 ## API 엔드포인트
 
-### 스토리 생성
+### 통합 스토리 생성
 ```
-POST /api/story/generate
+POST /generate-complete-story
 Content-Type: application/json
 
 {
-  "station": "강남",
-  "line": 2,
-  "character": {
-    "name": "김철수",
-    "health": 100,
-    "mental": 100
-  },
-  "context": "이전 스토리 컨텍스트 (선택)"
+  "station_name": "강남",
+  "line_number": 2,
+  "character_health": 90,
+  "character_sanity": 80,
+  "story_type": "PUBLIC"
 }
 ```
 
 ### 헬스 체크
 ```
 GET /health
+```
+
+### Provider 상태
+```
+GET /providers
 ```
 
 ## 환경 변수
@@ -102,15 +103,11 @@ pip install -r requirements.txt
 
 # 서버 실행
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
-# 테스트
-pytest
-
-# 테스트 커버리지
-pytest --cov=. --cov-report=html
 ```
 
 서버는 `http://localhost:8000`에서 실행됩니다.
+
+현재 테스트 스위트는 제공되지 않습니다.
 
 ## Docker 빌드
 
@@ -139,25 +136,26 @@ GitHub Actions를 통한 자동 배포:
 
 ```
 .
-├── main.py              # FastAPI 애플리케이션
-├── config/              # 설정
-│   └── settings.py     # 환경 변수 관리
-├── providers/           # LLM Provider
-│   ├── openai.py       # OpenAI 클라이언트
-│   └── claude.py       # Claude 클라이언트
-├── services/            # 비즈니스 로직
-│   ├── story.py        # 스토리 생성 서비스
-│   └── cache.py        # 캐시 서비스
-├── models/              # 데이터 모델
-│   ├── request.py      # 요청 모델
-│   └── response.py     # 응답 모델
-├── prompt/              # 프롬프트 템플릿
-│   └── templates.py    # 스토리 생성 프롬프트
-├── utils/               # 유틸리티
-│   └── logger.py       # 로깅
-└── tests/               # 테스트
-    ├── test_api.py     # API 테스트
-    └── test_story.py   # 스토리 생성 테스트
+├── main.py
+├── config/
+│   └── settings.py
+├── providers/
+│   └── llm_provider.py
+├── services/
+│   ├── batch_story_service.py
+│   ├── multiplayer_story_service.py
+│   └── story_service.py
+├── models/
+│   ├── batch_models.py
+│   ├── multiplayer_models.py
+│   ├── request_models.py
+│   └── response_models.py
+├── prompt/
+│   └── prompt_manager.py
+├── templates/
+├── utils/
+│   └── rate_limiter.py
+└── requirements.txt
 ```
 
 ## 스토리 생성 로직
