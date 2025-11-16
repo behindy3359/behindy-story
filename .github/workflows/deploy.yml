@@ -147,11 +147,12 @@ jobs:
             echo "✓ Switched to Green deployment"
           else
             cleanup_container llmserver-green
-            if docker ps -a --format '{{.Names}}' | grep -Fxq llmserver; then
-              docker rename llmserver llmserver-green
+            if docker ps -a --format '{{.Names}}' | grep -Fxq llmserver-blue; then
+              docker rename llmserver-blue llmserver
+              echo "✓ Switched to Blue deployment (reuse llmserver-blue)"
+            else
+              echo "✓ No llmserver-blue container to promote; ${{ steps.color.outputs.target_container }} already serves traffic"
             fi
-            docker rename llmserver-blue llmserver
-            echo "✓ Switched to Blue deployment"
           fi
 
       - name: Reload nginx and verify routing
