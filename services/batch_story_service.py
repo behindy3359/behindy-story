@@ -37,134 +37,69 @@ class BatchStoryService:
     async def generate_complete_story(self, request: BatchStoryRequest) -> BatchStoryResponse:
         """완전한 스토리 생성 (Spring Boot DB 저장용) - 테마 제한 적용"""
         try:
-            # 🆕 요청 로그
-            logger.info("=" * 60)
-            logger.info("🚀 배치 스토리 생성 시작 (테마 제한: 공포/미스터리/스릴러)")
-            logger.info(f"역명: {request.station_name}역 ({request.line_number}호선)")
-            logger.info(f"캐릭터 상태: 체력={request.character_health}, 정신력={request.character_sanity}")
-            logger.info(f"현재 Provider: {self.provider.get_provider_name()}")
-            logger.info(f"허용된 테마: {ALLOWED_THEMES}")
-            logger.info("=" * 60)
-            
-            # 1. 기본 스토리 정보 생성 (테마 제한 적용)
             story_info = await self._generate_story_metadata(request)
-            
-            # 🆕 테마 제한 검증
+
             if story_info.get("theme") not in ALLOWED_THEMES:
-                logger.warning(f"⚠️ 허용되지 않은 테마 감지: {story_info.get('theme')}")
                 story_info["theme"] = self._get_fallback_theme(request.station_name)
-                logger.info(f"✅ 테마 교체: {story_info['theme']}")
-            
-            # 🆕 메타데이터 로그
-            logger.info("📋 스토리 메타데이터 생성 완료:")
-            logger.info(f"  제목: {story_info.get('story_title', 'N/A')}")
-            logger.info(f"  테마: {story_info.get('theme', 'N/A')} ✅")
-            logger.info(f"  예상 길이: {story_info.get('estimated_length', 'N/A')}페이지")
-            logger.info(f"  난이도: {story_info.get('difficulty', 'N/A')}")
-            
-            # 2. 페이지별 스토리 생성 (테마 제한 적용)
+
             pages = await self._generate_story_pages(request, story_info)
-            
-            # 🆕 페이지 생성 완료 로그
-            logger.info("📄 페이지 생성 완료:")
-            logger.info(f"  총 페이지 수: {len(pages)}")
-            for i, page in enumerate(pages):
-                logger.info(f"  페이지 {i+1}: {len(page.content)}자, 선택지 {len(page.options)}개")
-                logger.info(f"    내용 미리보기: {page.content[:100]}...")
-                for j, option in enumerate(page.options):
-                    logger.info(f"    선택지 {j+1}: {option.content} ({option.effect} {option.amount:+})")
-            
-            # 3. 응답 구성
+
             response = BatchStoryResponse(
                 story_title=story_info["story_title"],
                 description=story_info["description"],
-                theme=story_info["theme"],  # 제한된 테마만 포함
+                theme=story_info["theme"],
                 keywords=story_info["keywords"],
                 pages=pages,
                 estimated_length=len(pages),
                 difficulty=story_info["difficulty"],
                 station_name=request.station_name,
-                line_number=request.line_number
+                line_number=request.line_number,
             )
-            
-            # 🆕 최종 응답 로그
-            logger.info("✅ 배치 스토리 생성 최종 완료:")
-            logger.info(f"  제목: {response.story_title}")
-            logger.info(f"  최종 테마: {response.theme} ✅")
-            logger.info(f"  실제 페이지 수: {len(response.pages)}")
-            logger.info(f"  키워드: {response.keywords}")
-            logger.info("=" * 60)
-            
+
+            logger.info(
+                "Batch story success station=%s line=%s pages=%s",
+                request.station_name,
+                request.line_number,
+                len(response.pages),
+            )
+
             return response
-            
+
         except Exception as e:
-            logger.error("❌ 배치 스토리 생성 실패:")
-            logger.error(f"  오류 타입: {type(e).__name__}")
-            logger.error(f"  오류 메시지: {str(e)}")
-            logger.error(f"  스택 트레이스: ", exc_info=True)
+            logger.error("Batch story generation failed: %s", str(e), exc_info=True)
             return self._create_fallback_complete_story(request)
     
     async def _generate_story_metadata(self, request: BatchStoryRequest) -> Dict[str, Any]:
         """스토리 메타데이터 생성 - 테마 제한 적용"""
         try:
-            # Provider 타입 결정
             provider_name = self.provider.get_provider_name().lower()
-            logger.info(f"🤖 메타데이터 생성 - Provider: {provider_name}")
-            
+
             if "mock" in provider_name:
-                logger.info("📝 Mock Provider로 메타데이터 생성 (테마 제한 적용)")
                 return self._create_mock_story_metadata(request)
-            
-            # 🆕 실제 LLM 호출 전 로그
-            logger.info("🚀 실제 LLM 호출로 메타데이터 생성 시작 (테마 제한 프롬프트)")
+
             metadata_prompt = self._create_themed_metadata_prompt(request)
-            
-            logger.info(f"📤 LLM 프롬프트 전송:")
-            logger.info(f"  길이: {len(metadata_prompt)}자")
-            logger.info(f"  프롬프트 미리보기: {metadata_prompt[:200]}...")
-            logger.info(f"  테마 제한: {ALLOWED_THEMES}")
-            
+
             context = {
                 'station_name': request.station_name,
                 'line_number': request.line_number
             }
-            
+
             result = await self.provider.generate_story(metadata_prompt, **context)
-            
-            # 🆕 LLM 응답 로그
-            logger.info("📥 LLM 메타데이터 응답:")
-            logger.info(f"  응답 타입: {type(result)}")
-            if isinstance(result, dict):
-                logger.info(f"  응답 키들: {list(result.keys())}")
-                logger.info(f"  story_title: {result.get('story_title', 'N/A')}")
-                logger.info(f"  description: {result.get('description', 'N/A')}")
-                logger.info(f"  theme: {result.get('theme', 'N/A')}")
-                
-                # 🎯 테마 검증
-                theme = result.get('theme', 'N/A')
-                if theme in ALLOWED_THEMES:
-                    logger.info(f"  ✅ 테마 검증 통과: {theme}")
-                else:
-                    logger.warning(f"  ⚠️ 허용되지 않은 테마: {theme}")
-                    result['theme'] = self._get_fallback_theme(request.station_name)
-                    logger.info(f"  🔄 테마 교체: {result['theme']}")
-            else:
-                logger.warning(f"  예상치 못한 응답 형식: {result}")
-            
-            # 결과 검증 및 보완
+
             if isinstance(result, dict) and "story_title" in result:
-                logger.info("✅ 메타데이터 생성 성공")
-                # 키워드에 테마 추가
+                theme = result.get('theme')
+                if theme not in ALLOWED_THEMES:
+                    result['theme'] = self._get_fallback_theme(request.station_name)
+
                 if 'keywords' in result:
                     result['keywords'].append(result.get('theme', '미스터리'))
+
                 return result
-            else:
-                logger.warning("⚠️ 메타데이터 생성 결과 검증 실패, Mock 데이터 사용")
-                return self._create_mock_story_metadata(request)
-                
+
+            return self._create_mock_story_metadata(request)
+
         except Exception as e:
-            logger.error(f"❌ 메타데이터 생성 실패: {str(e)}")
-            logger.error("Mock 메타데이터로 대체 (테마 제한 적용)")
+            logger.error("Metadata generation failed: %s", str(e))
             return self._create_mock_story_metadata(request)
     
     def _create_themed_metadata_prompt(self, request: BatchStoryRequest) -> str:
@@ -208,28 +143,21 @@ JSON 응답 형식:
         pages = []
         theme = story_info.get("theme", "미스터리")
         
-        logger.info(f"📄 {target_length}페이지 생성 시작 (테마: {theme})")
-        
         for page_num in range(1, target_length + 1):
             try:
-                logger.info(f"페이지 {page_num}/{target_length} 생성 중... (테마: {theme})")
-                
                 page_data = await self._generate_single_page(
                     request, story_info, page_num, target_length, pages
                 )
                 
                 if page_data:
                     pages.append(page_data)
-                    logger.info(f"✅ 페이지 {page_num} 생성 완료")
                 else:
-                    logger.warning(f"페이지 {page_num} 생성 실패, 기본 페이지 사용")
                     pages.append(self._create_fallback_page(page_num, target_length, theme))
                     
             except Exception as e:
                 logger.error(f"페이지 {page_num} 생성 오류: {str(e)}")
                 pages.append(self._create_fallback_page(page_num, target_length, theme))
         
-        logger.info(f"총 {len(pages)}페이지 생성 완료 (테마: {theme})")
         return pages
     
     def _validate_page_theme_consistency(self, page_data: BatchPageData, expected_theme: str) -> bool:
@@ -303,7 +231,6 @@ JSON 형식으로만 응답하세요:
                         options=options
                     )
             
-            logger.warning(f"페이지 {page_num} LLM 결과가 올바르지 않음")
             return None
             
         except Exception as e:
@@ -562,8 +489,6 @@ JSON 형식으로만 응답하세요:
     
     def _create_fallback_complete_story(self, request: BatchStoryRequest) -> BatchStoryResponse:
         """전체 생성 실패시 Fallback 스토리 - 테마 제한 적용"""
-        logger.warning("Fallback 완전한 스토리 생성 (테마 제한 적용)")
-        
         # 기본 메타데이터 (테마 제한)
         metadata = self._create_mock_story_metadata(request)
         theme = metadata["theme"]

@@ -16,28 +16,20 @@ class MultiplayerStoryService:
 
     async def generate_next_phase(self, request: MultiplayerStoryRequest) -> MultiplayerStoryResponse:
         try:
-            logger.info("=" * 60)
-            logger.info(f"멀티플레이어 Phase {request.current_phase} 생성 시작")
-            logger.info(f"역: {request.station_name}역 ({request.line_number}호선)")
-            logger.info(f"참여자 수: {len(request.participants)}")
-            logger.info(f"최근 메시지 수: {len(request.recent_messages)}")
 
             provider_name = self.provider.get_provider_name().lower()
 
             if "mock" in provider_name:
-                logger.info("Mock Provider로 응답 생성")
                 return self._create_mock_response(request)
 
             context = self._build_context(request)
             prompt = self._build_prompt(request)
 
-            logger.info(f"LLM 호출: {self.provider.get_provider_name()}")
             result = await self.provider.generate_story(prompt, **context)
 
             if isinstance(result, dict):
                 return self._parse_llm_response(result, request)
             else:
-                logger.warning("예상치 못한 LLM 응답 형식")
                 return self._create_mock_response(request)
 
         except Exception as e:
