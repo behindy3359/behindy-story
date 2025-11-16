@@ -129,6 +129,11 @@ jobs:
             echo "✓ Switched to Blue deployment"
           fi
 
+      - name: Reload nginx and verify routing
+        run: |
+          cd ~/behindy-ops
+          ./scripts/reconnect-nginx.sh llmserver
+
       - name: Health check (external via Backend proxy)
         run: |
           echo "Running external health check via https://behindy.me..."
