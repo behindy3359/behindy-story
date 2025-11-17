@@ -1,61 +1,67 @@
-# Behindy LLM Server - 2025.11.09
+# Behindy Story (LLM Server)
 
-지하철 역 기반 텍스트 어드벤처 게임의 AI 스토리 생성 서버입니다.
+서울 지하철 역을 배경으로 한 텍스트 어드벤처 게임의 AI 스토리 생성 서버입니다. OpenAI GPT 및 Anthropic Claude를 활용하여 역 정보와 캐릭터 상태에 기반한 맞춤형 스토리와 선택지를 생성합니다.
 
 ## 기술 스택
 
-- **Framework**: FastAPI
+- **Framework**: FastAPI 0.104.1
 - **Language**: Python 3.11
-- **LLM Providers**: OpenAI, Anthropic Claude
-- **Cache**: Redis
+- **ASGI Server**: Uvicorn 0.24 (with standard extras)
+- **Data Validation**: Pydantic 2.5 + pydantic-settings 2.1
+- **LLM Providers**: OpenAI 1.3 (GPT-4o-mini), Anthropic 0.7 (Claude 3 Haiku)
+- **HTTP Client**: aiohttp 3.9 (비동기), requests 2.31 (동기)
+- **Test**: pytest 7.4, pytest-asyncio 0.21, httpx 0.25
 
 ## 주요 기능
 
 ### AI 스토리 생성
-- 지하철 역 정보를 바탕으로 한 스토리 생성
-- 캐릭터 특성을 반영한 맞춤형 스토리
-- 선택지 자동 생성 (3-4개)
-- 스토리 일관성 유지
+- 서울 지하철 역 정보 기반 컨텍스트 생성
+- 역의 특성, 분위기, 시간대를 반영한 스토리
+- 캐릭터 상태 (HP, Sanity) 고려
+- 3-4개 선택지 자동 생성
+- 각 선택지별 HP/Sanity 변화 예측
+- 스토리 일관성 및 몰입감 유지
 
-### LLM Provider 지원
-- OpenAI GPT-4o-mini
-- Anthropic Claude 3 Haiku
-- Provider 자동 전환 (Fallback)
+### 멀티플레이어 스토리 생성
+- 다중 참여자의 채팅 히스토리 분석
+- Phase별 상황 진행
+- 참여자별 개별 상태 변화 계산
+- 실시간 협력 스토리텔링
+
+### LLM Provider 관리
+- OpenAI GPT-4o-mini (Primary)
+- Anthropic Claude 3 Haiku (Fallback)
+- Provider 자동 전환 (장애 복구)
+- Mock Provider (개발/테스트 환경)
 
 ### 성능 최적화
-- Redis 캐싱 (중복 요청 방지)
-- Rate Limiting (시간당/일일 제한)
-- 비동기 처리
+- 비동기 처리 (asyncio, aiohttp)
+- Rate Limiting (시간당/일일 요청 제한)
+- 응답 캐싱 (옵션)
 
-### 헬스 체크
-- `/health` 엔드포인트
-- LLM Provider 상태 확인
-- Redis 연결 상태 확인
+### 모니터링
+- `/health` 헬스 체크 엔드포인트
+- `/providers` Provider 상태 조회
+- 구조화된 로깅
 
 ## API 엔드포인트
 
-### 통합 스토리 생성
+### 싱글플레이어 스토리 생성
 ```
 POST /generate-complete-story
-Content-Type: application/json
-
-{
-  "station_name": "강남",
-  "line_number": 2,
-  "character_health": 90,
-  "character_sanity": 80,
-  "story_type": "PUBLIC"
-}
+POST /llm/story/generate
+POST /llm/batch/stories
 ```
 
-### 헬스 체크
+### 멀티플레이어 스토리 생성
 ```
-GET /health
+POST /llm/multiplayer/next-phase
 ```
 
-### Provider 상태
+### 모니터링
 ```
-GET /providers
+GET /health          # 헬스 체크
+GET /providers       # LLM Provider 상태
 ```
 
 ## 환경 변수
@@ -107,7 +113,10 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 서버는 `http://localhost:8000`에서 실행됩니다.
 
-현재 테스트 스위트는 제공되지 않습니다.
+# 테스트 실행
+pytest
+pytest -v                    # Verbose 모드
+pytest tests/test_story.py   # 특정 파일만
 
 ## Docker 빌드
 
@@ -252,11 +261,20 @@ async def generate_story(request: StoryRequest):
 - 내부 API 인증 (Backend 간)
 - Rate Limiting
 
+## 아키텍처
+
+이 프로젝트는 멀티레포지토리 아키텍처를 사용합니다.
+
+- Frontend: Next.js 기반 UI 레이어
+- Backend: Spring Boot 기반 API 서버 및 비즈니스 로직
+- Story (이 레포): FastAPI 기반 AI 스토리 생성 전담 서버
+- Ops: Docker Compose 기반 인프라 관리
+
 ## 관련 레포지토리
 
-- [behindy-backend](https://github.com/behindy3359/behindy-backend) - Spring Boot 백엔드
-- [behindy-frontend](https://github.com/behindy3359/behindy-frontend) - Next.js 프론트엔드
-- [behindy-ops](https://github.com/behindy3359/behindy-ops) - 인프라 설정
+- [behindy-front](https://github.com/behindy3359/behindy-front) - Next.js 프론트엔드
+- [behindy-back](https://github.com/behindy3359/behindy-back) - Spring Boot 백엔드 API 서버
+- [behindy-ops](https://github.com/behindy3359/behindy-ops) - 인프라 관리 (PostgreSQL, Redis, Nginx)
 
 ## 라이선스
 
