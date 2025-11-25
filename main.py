@@ -157,7 +157,7 @@ async def generate_complete_story(request: BatchStoryRequest, http_request: Requ
             line_number=request.line_number,
         )
 
-@app.post("/llm/multiplayer/next-phase", response_model=MultiplayerStoryResponse)
+@app.post("/api/multiplayer/generate-story", response_model=MultiplayerStoryResponse)
 async def generate_multiplayer_story(request: MultiplayerStoryRequest, http_request: Request):
     try:
         api_key = http_request.headers.get("X-Internal-API-Key")
@@ -167,10 +167,11 @@ async def generate_multiplayer_story(request: MultiplayerStoryRequest, http_requ
         response = await multiplayer_story_service.generate_next_phase(request)
 
         logger.info(
-            "multiplayer story success station=%s line=%s phase=%s",
+            "multiplayer story success room_id=%s station=%s phase=%s is_intro=%s",
+            request.room_id,
             request.station_name,
-            request.line_number,
-            request.current_phase,
+            request.phase,
+            request.is_intro,
         )
 
         return response
@@ -183,16 +184,18 @@ async def generate_multiplayer_story(request: MultiplayerStoryRequest, http_requ
 
         from models.multiplayer_models import ParticipantUpdate
         return MultiplayerStoryResponse(
-            content=f"{request.station_name}역에서 예상치 못한 일이 벌어집니다. 여러분의 선택이 필요합니다.",
-            summary=f"Phase {request.current_phase} 진행 중",
-            participant_updates=[
+            story_text=f"{request.station_name}역에서 예상치 못한 일이 벌어집니다. 여러분의 선택이 필요합니다.",
+            effects=[
                 ParticipantUpdate(
                     character_name=p.character_name,
                     hp_change=-1,
                     sanity_change=-1
                 )
                 for p in request.participants
-            ]
+            ],
+            phase=request.phase + 1,
+            is_ending=False,
+            story_outline=request.story_outline
         )
 
 # ===== 관리 및 디버깅 API =====
