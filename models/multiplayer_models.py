@@ -24,8 +24,13 @@ class ParticipantUpdate(BaseModel):
     hp_change: int = Field(0, description="체력 변화량")
     sanity_change: int = Field(0, description="정신력 변화량")
 
+class StoryContent(BaseModel):
+    current_situation: str = Field(..., description="현재 상황 묘사")
+    special_event: str = Field(..., description="특별한 이벤트")
+    hint: str = Field(..., description="플레이어 행동 유도 힌트")
+
 class MultiplayerStoryResponse(BaseModel):
-    story_text: str = Field(..., description="생성된 스토리 내용")
+    story: StoryContent = Field(..., description="구조화된 스토리 내용")
     effects: List[ParticipantUpdate] = Field(default_factory=list, description="참여자 상태 변화")
     phase: int = Field(..., ge=1, description="현재 Phase")
     is_ending: bool = Field(False, description="스토리 종료 여부")
