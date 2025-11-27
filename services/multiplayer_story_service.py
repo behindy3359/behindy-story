@@ -51,13 +51,15 @@ class MultiplayerStoryService:
                     story_content = self._create_default_story_content(request)
 
                 story_outline = result.get("story_outline", f"{request.station_name}역에서 벌어지는 미스터리")
+                phase_summary = result.get("phase_summary", f"{request.station_name}역에 도착하여 이상한 기운을 감지함")
 
                 return MultiplayerStoryResponse(
                     story=story_content,
                     effects=[],
                     phase=1,
                     is_ending=False,
-                    story_outline=story_outline
+                    story_outline=story_outline,
+                    phase_summary=phase_summary
                 )
             else:
                 return self._create_mock_response(request)
@@ -117,7 +119,8 @@ JSON 형식으로만 응답하세요:
         "hint": "플레이어가 할 수 있는 행동 제시..."
     }},
     "effects": [],
-    "story_outline": "스토리 전체 줄거리 (5-8 Phase 계획)"
+    "story_outline": "스토리 전체 줄거리 (5-8 Phase 계획)",
+    "phase_summary": "이번 Phase 요약 (1-2문장)"
 }}
 """
 
@@ -131,6 +134,20 @@ JSON 형식으로만 응답하세요:
             f"{msg.character_name}: {msg.content}"
             for msg in request.message_stack[-20:]
         ]) if request.message_stack else "대화 없음"
+
+        # 스토리 히스토리 섹션 생성
+        story_history_section = ""
+        if request.story_history:
+            history_text = "\n".join([
+                f"Phase {h.phase}: {h.summary}"
+                for h in request.story_history
+            ])
+            story_history_section = f"""
+[이전 스토리 흐름]
+{history_text}
+
+위 흐름을 이어받아 자연스럽게 진행하세요.
+"""
 
         story_outline_section = ""
         if request.story_outline:
@@ -146,19 +163,21 @@ JSON 형식으로만 응답하세요:
 
 [필수 규칙]
 1. Phase 6 이상부터는 적극적으로 엔딩으로 유도하세요
-2. Phase 8에 도달하면 반드시 is_ending을 true로 설정하세요
+2. Phase 8에 도달하면 반드시 is_ending을 true로 설정하고 ending_summary를 작성하세요
 3. 구조화된 스토리 형식을 따라야 합니다
 4. effects 배열에는 모든 캐릭터가 포함되어야 합니다 (변화가 없으면 0으로)
+5. 매 Phase마다 phase_summary를 1-2문장으로 작성하세요
 
 배경:
 - 역명: {request.station_name}역
 - 현재 Phase: {request.phase}
 {story_outline_section}
+{story_history_section}
 
 참가자 상태:
 {participants_info}
 
-최근 대화 (최대 20개):
+최근 대화 (현재 Phase의 최근 20개):
 {chat_history}
 
 [스토리 구조]
@@ -187,7 +206,9 @@ JSON 형식으로 응답하세요:
             "sanity_change": -5~+5
         }}
     ],
-    "is_ending": true/false (Phase 8 이상이면 true)
+    "is_ending": true/false (Phase 8 이상이면 true),
+    "phase_summary": "이번 Phase 요약 (1-2문장)",
+    "ending_summary": "엔딩일 때만 전체 스토리 요약 (500-1000자)"
 }}
 
 상태 변화 가이드:
@@ -196,6 +217,11 @@ JSON 형식으로 응답하세요:
 - 공포스러운 상황: Sanity -3~-7
 - 안정적인 상황: Sanity +1~+3
 - 모든 캐릭터를 effects에 포함하세요 (변화 없으면 hp_change: 0, sanity_change: 0)
+
+엔딩 요약 가이드:
+- is_ending이 true일 때만 ending_summary를 작성하세요
+- 전체 스토리를 500-1000자로 요약하세요
+- 시작부터 엔딩까지의 주요 사건을 포함하세요
 """
 
     def _parse_llm_response(self, result: Dict, request: MultiplayerStoryRequest) -> MultiplayerStoryResponse:
@@ -212,6 +238,8 @@ JSON 형식으로 응답하세요:
             story_content = self._create_default_story_content(request)
 
         is_ending = result.get("is_ending", False)
+        phase_summary = result.get("phase_summary", "")
+        ending_summary = result.get("ending_summary") if is_ending else None
 
         effects = []
         effects_data = result.get("effects", [])
@@ -228,7 +256,9 @@ JSON 형식으로 응답하세요:
             effects=effects,
             phase=request.phase + 1,
             is_ending=is_ending,
-            story_outline=request.story_outline
+            story_outline=request.story_outline,
+            phase_summary=phase_summary,
+            ending_summary=ending_summary
         )
 
     def _create_default_effects(self, participants: List[ParticipantInfo]) -> List[ParticipantUpdate]:
@@ -262,12 +292,14 @@ JSON 형식으로 응답하세요:
                 hint="주변을 살펴보며 단서를 찾아보세요."
             )
             story_outline = f"{request.station_name}역에서 벌어지는 미스터리. 참가자들은 5-8 Phase 안에 진실을 밝혀야 합니다."
+            phase_summary = f"{request.station_name}역에 도착하여 이상한 기운을 감지함"
             return MultiplayerStoryResponse(
                 story=story_content,
                 effects=[],
                 phase=1,
                 is_ending=False,
-                story_outline=story_outline
+                story_outline=story_outline,
+                phase_summary=phase_summary
             )
 
         themes = {
@@ -307,11 +339,15 @@ JSON 형식으로 응답하세요:
         ]
 
         is_ending = request.phase >= 8
+        phase_summary = f"{selected_theme} 테마 진행"
+        ending_summary = f"{request.station_name}역에서의 모험이 종료되었습니다." if is_ending else None
 
         return MultiplayerStoryResponse(
             story=story_content,
             effects=effects,
             phase=request.phase + 1,
             is_ending=is_ending,
-            story_outline=request.story_outline
+            story_outline=request.story_outline,
+            phase_summary=phase_summary,
+            ending_summary=ending_summary
         )

@@ -10,6 +10,10 @@ class ChatHistoryItem(BaseModel):
     character_name: str = Field(..., description="발화자 캐릭터 이름")
     content: str = Field(..., description="메시지 내용")
 
+class StoryHistoryItem(BaseModel):
+    phase: int = Field(..., description="Phase 번호")
+    summary: str = Field(..., description="해당 Phase의 요약")
+
 class MultiplayerStoryRequest(BaseModel):
     room_id: int = Field(..., description="방 ID")
     phase: int = Field(..., ge=0, description="현재 Phase")
@@ -17,6 +21,7 @@ class MultiplayerStoryRequest(BaseModel):
     story_outline: Optional[str] = Field(None, description="스토리 개요 (컨텍스트 유지용)")
     participants: List[ParticipantInfo] = Field(..., description="참여자 정보")
     message_stack: List[ChatHistoryItem] = Field(default_factory=list, description="대화 스택 (최근 20개)")
+    story_history: List[StoryHistoryItem] = Field(default_factory=list, description="이전 Phase들의 요약")
     is_intro: bool = Field(False, description="인트로 생성 모드 여부")
 
 class ParticipantUpdate(BaseModel):
@@ -35,3 +40,5 @@ class MultiplayerStoryResponse(BaseModel):
     phase: int = Field(..., ge=1, description="현재 Phase")
     is_ending: bool = Field(False, description="스토리 종료 여부")
     story_outline: Optional[str] = Field(None, description="스토리 개요 (인트로 시 반환)")
+    phase_summary: Optional[str] = Field(None, description="이번 Phase 요약 (다음 요청에 포함)")
+    ending_summary: Optional[str] = Field(None, description="엔딩 시 전체 스토리 요약")
