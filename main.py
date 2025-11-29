@@ -34,24 +34,10 @@ app.add_middleware(
 )
 
 # 서비스 초기화
-logger.info("Initializing FastAPI services")
-
 batch_story_service = BatchStoryService()
-logger.info("BatchStoryService ready")
-
 multiplayer_story_service = MultiplayerStoryService()
-logger.info("MultiplayerStoryService ready")
-
 rate_limiter = RateLimiter()
-logger.info("RateLimiter ready")
 
-# FastAPI 미들웨어로 모든 요청 로그
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    logger.info("Request %s %s", request.method, request.url.path)
-    response = await call_next(request)
-    logger.info("Response %s %s", request.method, response.status_code)
-    return response
 
 # ===== 헬스체크 및 상태 =====
 
@@ -112,14 +98,6 @@ async def generate_complete_story(request: BatchStoryRequest, http_request: Requ
             rate_limiter.check_rate_limit(client_ip)
 
         response = await batch_story_service.generate_complete_story(request)
-
-        logger.info(
-            "generate-complete-story success station=%s line=%s title=%s",
-            request.station_name,
-            request.line_number,
-            response.story_title,
-        )
-
         return response
 
     except HTTPException:
@@ -165,15 +143,6 @@ async def generate_multiplayer_story(request: MultiplayerStoryRequest, http_requ
             raise HTTPException(status_code=403, detail="Unauthorized internal API access")
 
         response = await multiplayer_story_service.generate_next_phase(request)
-
-        logger.info(
-            "multiplayer story success room_id=%s station=%s phase=%s is_intro=%s",
-            request.room_id,
-            request.station_name,
-            request.phase,
-            request.is_intro,
-        )
-
         return response
 
     except HTTPException as e:
@@ -208,9 +177,7 @@ async def validate_story_structure(validation_request: Dict[str, Any], http_requ
         api_key = http_request.headers.get("X-Internal-API-Key")
         if api_key != "behindy-internal-2025-secret-key":
             raise HTTPException(status_code=403, detail="Unauthorized internal API access")
-        
-        logger.info("story validation requested")
-        
+
         validation_result = await batch_story_service.validate_story_structure(
             validation_request.get("story_data", {})
         )
@@ -266,9 +233,7 @@ async def test_provider(test_request: Dict[str, Any]):
     """Provider 테스트용 엔드포인트"""
     try:
         provider = LLMProviderFactory.get_provider()
-        
-        logger.info("Provider test started with provider=%s", provider.get_provider_name())
-        
+
         # 간단한 테스트 스토리 생성 요청
         test_request_obj = BatchStoryRequest(
             station_name=test_request.get("station_name", "강남"),
@@ -326,7 +291,6 @@ async def get_config():
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    logger.warning(f"HTTP 오류: {exc.status_code} - {exc.detail}")
     return {
         "error": exc.detail,
         "status_code": exc.status_code,
@@ -335,7 +299,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    logger.error(f"일반 오류: {str(exc)}")
     return {
         "error": "내부 서버 오류가 발생했습니다.",
         "status_code": 500,
@@ -346,17 +309,5 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 if __name__ == "__main__":
     import uvicorn
-    
-    # 시작시 Provider 상태 로깅
-    try:
-        provider = LLMProviderFactory.get_provider()
-        available = LLMProviderFactory.get_available_providers()
-        
-        logger.info("Behindy AI Server starting")
-        logger.info("Current provider: %s", provider.get_provider_name())
-        logger.info("Available providers: %s", available)
-        
-    except Exception as e:
-        logger.error("Initialization error: %s", str(e))
     
     uvicorn.run(app, host="0.0.0.0", port=8000)

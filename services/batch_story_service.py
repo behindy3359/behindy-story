@@ -56,13 +56,6 @@ class BatchStoryService:
                 line_number=request.line_number,
             )
 
-            logger.info(
-                "Batch story success station=%s line=%s pages=%s",
-                request.station_name,
-                request.line_number,
-                len(response.pages),
-            )
-
             return response
 
         except Exception as e:
@@ -99,7 +92,6 @@ class BatchStoryService:
             return self._create_mock_story_metadata(request)
 
         except Exception as e:
-            logger.error("Metadata generation failed: %s", str(e))
             return self._create_mock_story_metadata(request)
     
     def _create_themed_metadata_prompt(self, request: BatchStoryRequest) -> str:
@@ -153,9 +145,8 @@ JSON 응답 형식:
                     pages.append(page_data)
                 else:
                     pages.append(self._create_fallback_page(page_num, target_length, theme))
-                    
+
             except Exception as e:
-                logger.error(f"페이지 {page_num} 생성 오류: {str(e)}")
                 pages.append(self._create_fallback_page(page_num, target_length, theme))
         
         return pages
@@ -230,11 +221,10 @@ JSON 형식으로만 응답하세요:
                         content=result["content"],
                         options=options
                     )
-            
+
             return None
-            
+
         except Exception as e:
-            logger.error(f"페이지 {page_num} 생성 오류: {str(e)}")
             return None
     
     def _prepare_page_context(self, request: BatchStoryRequest, story_info: Dict,
@@ -343,9 +333,8 @@ JSON 형식으로만 응답하세요:
                 "fixed_structure": None,  # 자동 수정은 추후 구현
                 "theme_valid": theme in ALLOWED_THEMES if theme else False
             }
-            
+
         except Exception as e:
-            logger.error(f"구조 검증 실패: {str(e)}")
             return {
                 "is_valid": False,
                 "errors": [f"검증 오류: {str(e)}"],
