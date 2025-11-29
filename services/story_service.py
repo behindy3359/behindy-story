@@ -15,8 +15,6 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# ===== 품질 관련 데이터 클래스들 =====
-
 @dataclass
 class ValidationResult:
     """JSON 검증 결과"""
@@ -27,27 +25,25 @@ class ValidationResult:
 @dataclass
 class QualityScore:
     """품질 평가 점수"""
-    total_score: float  # 0-100
-    creativity: float   # 창의성 (0-20)
-    coherence: float    # 일관성 (0-20)
-    engagement: float   # 몰입도 (0-20)
-    korean_quality: float  # 한국어 품질 (0-20)
-    game_suitability: float  # 게임 적합성 (0-20)
+    total_score: float
+    creativity: float
+    coherence: float
+    engagement: float
+    korean_quality: float
+    game_suitability: float
     feedback: str
-    passed: bool  # 최소 점수 통과 여부
+    passed: bool
 
 class StoryService:
     """스토리 생성 서비스 (품질 파이프라인 + 외부 프롬프트)"""
-    
+
     def __init__(self, min_quality_score: float = 70.0, max_retries: int = 3):
-        
+
         self.provider = LLMProviderFactory.get_provider()
         self.prompt_manager = get_prompt_manager()
         self.min_quality_score = min_quality_score
         self.max_retries = max_retries
-        
-        
-        # 기존 통계 + 품질 통계
+
         self.request_count = {}
         self.popular_stations = {}
         self.quality_stats = {
@@ -58,21 +54,19 @@ class StoryService:
             "average_score": 0.0,
             "average_generation_time": 0.0,
             "quality_distribution": {
-                "excellent": 0,  # 90+
-                "good": 0,       # 80-89
-                "acceptable": 0, # 70-79
-                "poor": 0        # <70
+                "excellent": 0,
+                "good": 0,
+                "acceptable": 0,
+                "poor": 0
             }
         }
-    
+
     async def generate_story(self, request: StoryGenerationRequest) -> StoryGenerationResponse:
         """품질 파이프라인을 통한 스토리 생성"""
         start_time = time.time()
         self.quality_stats["total_requests"] += 1
-        
-        
+
         try:
-            # 컨텍스트 준비
             context = {
                 'station_name': request.station_name,
                 'line_number': request.line_number,
@@ -80,17 +74,13 @@ class StoryService:
                 'character_sanity': request.character_sanity,
                 'theme_preference': request.theme_preference
             }
-            
-            
-            # 품질 파이프라인을 통한 스토리 생성
+
             story_data = await self._generate_validated_story(context)
-            
-            # 통계 업데이트
+
             generation_time = time.time() - start_time
-            
+
             self._update_quality_stats(request.station_name, story_data, generation_time)
-            
-            # 응답 형식으로 변환
+
             response = StoryGenerationResponse(
                 story_title=story_data["story_title"],
                 page_content=story_data["page_content"],
@@ -101,30 +91,28 @@ class StoryService:
                 station_name=story_data.get("station_name", request.station_name),
                 line_number=story_data.get("line_number", request.line_number)
             )
-            
-            
+
             return response
-            
+
         except Exception as e:
             logger.error("StoryService.generate_story 실패")
             logger.error(f"  오류 타입: {type(e).__name__}")
             logger.error(f"  오류 메시지: {str(e)}")
             logger.error(f"  스택 트레이스:", exc_info=True)
-            
+
             self.quality_stats["quality_failures"] += 1
-            
+
             return self._create_fallback_response(request)
-    
+
     async def continue_story(self, request: StoryContinueRequest) -> StoryContinueResponse:
         """스토리 진행 (기존 로직 유지)"""
-        
+
         provider = LLMProviderFactory.get_provider()
-        
-        # Mock Provider인 경우 특별 처리
+
         if provider.get_provider_name() == "Mock Provider":
             from templates.mock_templates import MockStoryGenerator
             generator = MockStoryGenerator()
-            
+
             continuation_data = generator.continue_story(
                 request.previous_choice,
                 request.station_name,
@@ -132,7 +120,6 @@ class StoryService:
                 request.character_sanity
             )
         else:
-            # 실제 LLM Provider 처리 - 외부 프롬프트 사용
             context = {
                 'station_name': request.station_name,
                 'line_number': request.line_number,
@@ -141,151 +128,127 @@ class StoryService:
                 'previous_choice': request.previous_choice,
                 'story_context': request.story_context
             }
-            
+
             user_prompt = self.prompt_manager.create_user_prompt(context, "continuation")
             continuation_data = await provider.generate_story(user_prompt, **context)
-        
+
         response = StoryContinueResponse(
             page_content=continuation_data["page_content"],
             options=[OptionData(**opt) for opt in continuation_data["options"]],
             is_last_page=continuation_data.get("is_last_page", False)
         )
-        
+
         return response
-    
-    # ===== 품질 파이프라인 메서드들 =====
-    
+
     async def _generate_validated_story(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """검증된 고품질 스토리 생성"""
-        
+
         for attempt in range(self.max_retries):
             try:
-                
-                # 1단계: 외부 프롬프트로 스토리 생성
+
                 story_result = await self._generate_story_with_external_prompt(context)
                 if not story_result:
                     continue
-                
-                
-                # 2단계: JSON 검증
+
                 validation_result = self._validate_json_structure(story_result)
                 if not validation_result.is_valid:
                     self.quality_stats["json_failures"] += 1
                     continue
-                
-                
-                # 3단계: 품질 평가
+
                 quality_score = await self._evaluate_story_quality(story_result)
                 if not quality_score.passed:
                     continue
-                
-                # 성공!
-                
+
                 story_result["quality_score"] = quality_score.total_score
                 story_result["quality_feedback"] = quality_score.feedback
-                
+
                 return story_result
-                
+
             except Exception as e:
                 logger.error(f"스토리 생성 시도 {attempt + 1} 예외 발생")
                 logger.error(f"  오류: {str(e)}")
                 logger.error(f"  스택 트레이스:", exc_info=True)
                 continue
-        
-        # 모든 시도 실패시 fallback
+
         logger.error("모든 품질 시도 실패, fallback 스토리 반환")
         return self._create_fallback_story(context)
-    
+
     async def _generate_story_with_external_prompt(self, context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """외부 프롬프트 파일을 사용한 스토리 생성"""
-        
+
         try:
-            # Provider 타입 결정
             provider_name = self.provider.get_provider_name().lower()
-            
+
             if "openai" in provider_name:
                 prompt_provider = "openai"
             elif "claude" in provider_name:
                 prompt_provider = "claude"
             else:
                 prompt_provider = "openai"
-            
-            
-            # 외부 프롬프트 매니저에서 프롬프트 가져오기
+
             story_prompt = self.prompt_manager.get_story_prompt(prompt_provider)
             user_prompt = self.prompt_manager.create_user_prompt(context, "generation")
             full_prompt = f"{story_prompt}\n\n{user_prompt}"
-            
-            
-            # 🆕 중요: LLM 호출 직전 로그
-            
-            # LLM 호출
+
             result = await self.provider.generate_story(full_prompt, **context)
-            
+
             return result
-            
+
         except Exception as e:
             logger.error(f"외부 프롬프트 스토리 생성 실패")
             logger.error(f"  오류 타입: {type(e).__name__}")
             logger.error(f"  오류 메시지: {str(e)}")
             logger.error(f"  스택 트레이스:", exc_info=True)
             return None
-    
+
     def _validate_json_structure(self, story_data: Dict[str, Any]) -> ValidationResult:
         """JSON 구조 검증 (간소화)"""
-        
+
         try:
             errors = []
-            
-            # 필수 필드 확인
+
             required_fields = ["story_title", "page_content", "options", "difficulty", "theme", "station_name", "line_number"]
             for field in required_fields:
                 if field not in story_data:
                     errors.append(f"필수 필드 누락: {field}")
-            
-            # options 검증
+
             options = story_data.get("options", [])
             if not isinstance(options, list) or len(options) < 2 or len(options) > 4:
                 errors.append(f"선택지 개수 오류: {len(options)}개 (2-4개 필요)")
-            
-            # 각 선택지 검증
+
             for i, option in enumerate(options):
                 if not isinstance(option, dict):
                     errors.append(f"선택지 {i+1} 형식 오류")
                     continue
-                
+
                 option_fields = ["content", "effect", "amount", "effect_preview"]
                 for field in option_fields:
                     if field not in option:
                         errors.append(f"선택지 {i+1} 필드 누락: {field}")
-                
-                # 효과 값 검증
+
                 if option.get("effect") not in ["health", "sanity", "none"]:
                     errors.append(f"선택지 {i+1} effect 값 오류: {option.get('effect')}")
-                
-                # 수치 검증
+
                 amount = option.get("amount")
                 if not isinstance(amount, int) or amount < -10 or amount > 10:
                     errors.append(f"선택지 {i+1} amount 값 오류: {amount}")
-            
+
             is_valid = len(errors) == 0
             return ValidationResult(is_valid=is_valid, errors=errors)
-            
+
         except Exception as e:
             logger.error(f"JSON 검증 실패: {str(e)}")
             return ValidationResult(is_valid=False, errors=[str(e)])
-    
+
     async def _evaluate_story_quality(self, story_data: Dict[str, Any]) -> QualityScore:
         """외부 프롬프트를 사용한 품질 평가"""
-        
+
         try:
             provider_name = self.provider.get_provider_name().lower()
             prompt_provider = "openai" if "openai" in provider_name else "claude"
-            
-            
-            # 외부 평가 프롬프트 사용
+
             evaluation_prompt = self.prompt_manager.get_evaluation_prompt(prompt_provider)
-            
+
             evaluation_request = f"""다음 스토리를 평가해주세요:
 
 **스토리 데이터:**
@@ -294,10 +257,9 @@ class StoryService:
 위 스토리의 품질을 5개 기준으로 평가하고 JSON 형식으로 반환해주세요."""
 
             full_prompt = f"{evaluation_prompt}\n\n{evaluation_request}"
-            
+
             result = await self.provider.generate_story(full_prompt)
-            
-            # 결과 파싱
+
             if isinstance(result, dict):
                 total_score = result.get("total_score", 0)
                 quality_score = QualityScore(
@@ -310,17 +272,15 @@ class StoryService:
                     feedback=result.get("feedback", "평가 완료"),
                     passed=total_score >= self.min_quality_score
                 )
-                
-                
+
                 return quality_score
-            
-            # 파싱 실패시 기본값
+
             return QualityScore(
                 total_score=0, creativity=0, coherence=0, engagement=0,
                 korean_quality=0, game_suitability=0,
                 feedback="품질 평가 실패", passed=False
             )
-            
+
         except Exception as e:
             logger.error(f"품질 평가 실패: {str(e)}")
             return QualityScore(
@@ -328,30 +288,24 @@ class StoryService:
                 korean_quality=0, game_suitability=0,
                 feedback=f"평가 오류: {str(e)}", passed=False
             )
-    
-    # ===== 통계 및 관리 메서드들 =====
-    
+
     def _update_quality_stats(self, station_name: str, story_data: Dict, generation_time: float):
         """품질 통계 업데이트"""
         try:
             self.quality_stats["successful_generations"] += 1
-            
-            # 평균 생성 시간 업데이트
+
             current_avg = self.quality_stats["average_generation_time"]
             count = self.quality_stats["successful_generations"]
             self.quality_stats["average_generation_time"] = ((current_avg * (count - 1)) + generation_time) / count
-            
-            # 역별 인기도 업데이트 (기존 로직)
+
             station_key = f"{station_name}_{story_data.get('line_number', 0)}"
             self.popular_stations[station_key] = self.popular_stations.get(station_key, 0) + 1
-            
-            # 품질 점수 통계
+
             quality_score = story_data.get("quality_score", 0)
             if quality_score > 0:
                 current_avg_score = self.quality_stats["average_score"]
                 self.quality_stats["average_score"] = ((current_avg_score * (count - 1)) + quality_score) / count
-                
-                # 품질 분포 업데이트
+
                 if quality_score >= 90:
                     self.quality_stats["quality_distribution"]["excellent"] += 1
                 elif quality_score >= 80:
@@ -366,7 +320,7 @@ class StoryService:
 
     def _create_fallback_response(self, request: StoryGenerationRequest) -> StoryGenerationResponse:
         """Fallback 응답 생성"""
-        
+
         return StoryGenerationResponse(
             story_title=f"{request.station_name}역의 상황",
             page_content=f"{request.station_name}역에서 예상치 못한 일이 벌어졌습니다. 주변 상황을 파악하고 신중하게 행동해야 합니다.",
@@ -390,10 +344,10 @@ class StoryService:
             station_name=request.station_name,
             line_number=request.line_number
         )
-    
+
     def _create_fallback_story(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback 스토리 데이터 (고품질 생성 실패시)"""
-        
+
         return {
             "story_title": f"{context.get('station_name', '강남')}역의 모험",
             "page_content": f"{context.get('station_name', '강남')}역에서 예상치 못한 상황이 벌어졌습니다. 신중하게 대처해야 할 때입니다.",
@@ -419,13 +373,11 @@ class StoryService:
             "quality_score": 60.0,
             "quality_feedback": "Fallback 스토리 (품질 검증 우회)"
         }
-    
-    # ===== 기존 메서드들 유지 =====
-    
+
     def get_supported_stations(self) -> List[Dict]:
         """지원 역 목록"""
         from templates.mock_templates import STATION_CONFIG
-        
+
         return [
             {
                 "station_name": station,
@@ -436,13 +388,11 @@ class StoryService:
             }
             for station, config in STATION_CONFIG.items()
         ]
-    
+
     def get_popular_stations(self) -> Dict:
         """인기 역 통계"""
         return dict(sorted(self.popular_stations.items(), key=lambda x: x[1], reverse=True)[:10])
-    
-    # ===== 품질 관련 메서드들 =====
-    
+
     def get_quality_stats(self) -> Dict:
         """품질 통계 반환"""
         return {
@@ -454,14 +404,14 @@ class StoryService:
             ),
             "last_updated": datetime.now().isoformat()
         }
-    
+
     def get_quality_report(self) -> Dict:
         """품질 보고서"""
         total_quality_stories = sum(self.quality_stats["quality_distribution"].values())
-        
+
         if total_quality_stories == 0:
             return {"message": "품질 데이터 없음"}
-        
+
         return {
             "average_score": round(self.quality_stats["average_score"], 2),
             "total_evaluated": total_quality_stories,
@@ -484,15 +434,15 @@ class StoryService:
                 }
             }
         }
-    
+
     def update_quality_config(self, min_quality_score: float = None, max_retries: int = None):
         """품질 설정 업데이트"""
         if min_quality_score is not None:
             self.min_quality_score = min_quality_score
-        
+
         if max_retries is not None:
             self.max_retries = max_retries
-    
+
     def reset_quality_stats(self):
         """품질 통계 초기화"""
         self.quality_stats = {
@@ -509,10 +459,9 @@ class StoryService:
                 "poor": 0
             }
         }
-        # 기존 통계도 초기화
         self.popular_stations.clear()
         self.request_count.clear()
-    
+
     def reload_prompts(self):
         """프롬프트 파일 다시 로딩"""
         self.prompt_manager.reload_prompts()

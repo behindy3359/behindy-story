@@ -13,18 +13,15 @@ from services.batch_story_service import BatchStoryService
 from models.multiplayer_models import MultiplayerStoryRequest, MultiplayerStoryResponse
 from services.multiplayer_story_service import MultiplayerStoryService
 
-# 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# FastAPI 앱
 app = FastAPI(
     title="Behindy AI Server",
-    description="지하철 스토리 생성 서비스 (단일 엔드포인트)",
+    description="    ( )",
     version="3.0.0"
 )
 
-# CORS 설정
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -33,17 +30,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 서비스 초기화
 batch_story_service = BatchStoryService()
 multiplayer_story_service = MultiplayerStoryService()
 rate_limiter = RateLimiter()
 
 
-# ===== 헬스체크 및 상태 =====
-
 @app.get("/")
 async def root():
-    """기본 헬스 체크"""
+    """  """
     provider = LLMProviderFactory.get_provider()
     
     return {
@@ -57,7 +51,7 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """상세 헬스 체크"""
+    """  """
     provider = LLMProviderFactory.get_provider()
     available_providers = LLMProviderFactory.get_available_providers()
     
@@ -72,7 +66,7 @@ async def health_check():
 
 @app.get("/providers")
 async def get_providers_status():
-    """Provider 상태 확인"""
+    """Provider  """
     available_providers = LLMProviderFactory.get_available_providers()
     current_provider = LLMProviderFactory.get_provider()
     
@@ -88,7 +82,7 @@ async def get_providers_status():
 
 @app.post("/generate-complete-story", response_model=BatchStoryResponse)
 async def generate_complete_story(request: BatchStoryRequest, http_request: Request):
-    """통합 스토리 생성 엔드포인트"""
+    """   """
     try:
         api_key = http_request.headers.get("X-Internal-API-Key")
         request_mode = "BATCH" if api_key == "behindy-internal-2025-secret-key" else "PUBLIC"
@@ -106,31 +100,31 @@ async def generate_complete_story(request: BatchStoryRequest, http_request: Requ
         logger.error("generate-complete-story failed: %s", str(e), exc_info=True)
 
         return BatchStoryResponse(
-            story_title=f"{request.station_name}역의 이야기",
-            description=f"{request.station_name}역에서 벌어지는 예상치 못한 사건",
-            theme="미스터리",
-            keywords=[request.station_name, f"{request.line_number}호선", "지하철"],
+            story_title=f"{request.station_name} ",
+            description=f"{request.station_name}    ",
+            theme="",
+            keywords=[request.station_name, f"{request.line_number}", ""],
             pages=[
                 BatchPageData(
-                    content=f"{request.station_name}역에서 주의를 요하는 상황이 발생했습니다.",
+                    content=f"{request.station_name}    .",
                     options=[
                         BatchOptionData(
-                            content="신중하게 상황을 살핀다",
+                            content="  ",
                             effect="sanity",
                             amount=2,
-                            effect_preview="정신력 +2",
+                            effect_preview=" +2",
                         ),
                         BatchOptionData(
-                            content="즉시 행동한다",
+                            content=" ",
                             effect="health",
                             amount=-1,
-                            effect_preview="체력 -1",
+                            effect_preview=" -1",
                         ),
                     ],
                 )
             ],
             estimated_length=1,
-            difficulty="보통",
+            difficulty="",
             station_name=request.station_name,
             line_number=request.line_number,
         )
@@ -153,7 +147,7 @@ async def generate_multiplayer_story(request: MultiplayerStoryRequest, http_requ
 
         from models.multiplayer_models import ParticipantUpdate
         return MultiplayerStoryResponse(
-            story_text=f"{request.station_name}역에서 예상치 못한 일이 벌어집니다. 여러분의 선택이 필요합니다.",
+            story_text=f"{request.station_name}    .   .",
             effects=[
                 ParticipantUpdate(
                     character_name=p.character_name,
@@ -167,13 +161,11 @@ async def generate_multiplayer_story(request: MultiplayerStoryRequest, http_requ
             story_outline=request.story_outline
         )
 
-# ===== 관리 및 디버깅 API =====
 
 @app.post("/validate-story-structure")
 async def validate_story_structure(validation_request: Dict[str, Any], http_request: Request):
-    """스토리 구조 검증 (내부 API)"""
+    """   ( API)"""
     try:
-        # 내부 API 키 검증
         api_key = http_request.headers.get("X-Internal-API-Key")
         if api_key != "behindy-internal-2025-secret-key":
             raise HTTPException(status_code=403, detail="Unauthorized internal API access")
@@ -187,14 +179,13 @@ async def validate_story_structure(validation_request: Dict[str, Any], http_requ
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"구조 검증 실패: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"검증 중 오류: {str(e)}")
+        logger.error(f"  : {str(e)}")
+        raise HTTPException(status_code=500, detail=f"  : {str(e)}")
 
 @app.get("/batch/system-status")
 async def get_batch_system_status(http_request: Request):
-    """배치 시스템 상태 (내부/공개 API)"""
+    """   (/ API)"""
     try:
-        # 내부 API 키 확인 (선택적)
         api_key = http_request.headers.get("X-Internal-API-Key")
         is_internal = api_key == "behindy-internal-2025-secret-key"
         
@@ -215,7 +206,6 @@ async def get_batch_system_status(http_request: Request):
             "version": "3.0.0"
         }
         
-        # 내부 요청인 경우 더 상세한 정보 제공
         if is_internal:
             status["internal_mode"] = True
             status["api_endpoints"] = ["generate-complete-story"]
@@ -223,20 +213,18 @@ async def get_batch_system_status(http_request: Request):
         return status
         
     except Exception as e:
-        logger.error(f"배치 시스템 상태 조회 실패: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"상태 조회 중 오류: {str(e)}")
+        logger.error(f"    : {str(e)}")
+        raise HTTPException(status_code=500, detail=f"   : {str(e)}")
 
-# ===== 테스트 API =====
 
 @app.post("/test-provider")
 async def test_provider(test_request: Dict[str, Any]):
-    """Provider 테스트용 엔드포인트"""
+    """Provider  """
     try:
         provider = LLMProviderFactory.get_provider()
 
-        # 간단한 테스트 스토리 생성 요청
         test_request_obj = BatchStoryRequest(
-            station_name=test_request.get("station_name", "강남"),
+            station_name=test_request.get("station_name", ""),
             line_number=test_request.get("line_number", 2),
             character_health=80,
             character_sanity=80,
@@ -257,7 +245,7 @@ async def test_provider(test_request: Dict[str, Any]):
         }
         
     except Exception as e:
-        logger.error(f"Provider 테스트 실패: {str(e)}")
+        logger.error(f"Provider  : {str(e)}")
         return {
             "provider": "unknown",
             "status": "failed",
@@ -265,11 +253,10 @@ async def test_provider(test_request: Dict[str, Any]):
             "timestamp": datetime.now().isoformat()
         }
 
-# ===== 환경 설정 API =====
 
 @app.get("/config")
 async def get_config():
-    """현재 환경 설정 확인"""
+    """   """
     return {
         "ai_provider": os.getenv("AI_PROVIDER", "mock"),
         "openai_configured": bool(os.getenv("OPENAI_API_KEY")),
@@ -287,7 +274,6 @@ async def get_config():
         ]
     }
 
-# ===== 에러 핸들러 =====
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
@@ -300,12 +286,11 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     return {
-        "error": "내부 서버 오류가 발생했습니다.",
+        "error": "   .",
         "status_code": 500,
         "timestamp": datetime.now().isoformat()
     }
 
-# ===== 서버 실행 =====
 
 if __name__ == "__main__":
     import uvicorn

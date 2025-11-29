@@ -33,8 +33,7 @@ class BatchStoryResponse(BaseModel):
     theme: str = Field(..., description="테마")
     keywords: List[str] = Field(..., description="키워드 목록")
     pages: List[BatchPageData] = Field(..., min_items=1, description="페이지 목록")
-    
-    # 메타데이터
+
     estimated_length: int = Field(..., description="예상 길이")
     difficulty: str = Field(..., description="난이도")
     station_name: str = Field(..., description="역 이름")
