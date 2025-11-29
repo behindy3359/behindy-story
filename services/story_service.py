@@ -222,10 +222,6 @@ class StoryService:
             # LLM 호출
             result = await self.provider.generate_story(full_prompt, **context)
             
-            # 🆕 LLM 호출 후 로그
-            if isinstance(result, dict):
-            else:
-            
             return result
             
         except Exception as e:
@@ -273,9 +269,6 @@ class StoryService:
                     errors.append(f"선택지 {i+1} amount 값 오류: {amount}")
             
             is_valid = len(errors) == 0
-            
-            if errors:
-            
             return ValidationResult(is_valid=is_valid, errors=errors)
             
         except Exception as e:
@@ -367,10 +360,10 @@ class StoryService:
                     self.quality_stats["quality_distribution"]["acceptable"] += 1
                 else:
                     self.quality_stats["quality_distribution"]["poor"] += 1
-            
-                    
+
         except Exception as e:
-    
+            pass
+
     def _create_fallback_response(self, request: StoryGenerationRequest) -> StoryGenerationResponse:
         """Fallback 응답 생성"""
         
