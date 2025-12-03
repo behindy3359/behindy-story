@@ -7,16 +7,16 @@ from typing import List, Optional
 
 class OptionData(BaseModel):
     content: str
-    effect: str  # "HEALTH", "SANITY"
+    effect: str
     amount: int
-    effect_preview: str  # "체력 -10", "정신력 +5"
+    effect_preview: str
 
 class StoryGenerationResponse(BaseModel):
     story_title: str
     page_content: str
     options: List[OptionData]
     estimated_length: int
-    difficulty: str  # "쉬움", "보통", "어려움"
+    difficulty: str
     theme: str
     station_name: str
     line_number: int
