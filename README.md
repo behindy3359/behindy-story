@@ -1,4 +1,4 @@
-# Behindy Story (LLM Server)
+# Behindy Story
 
 서울 지하철 역을 배경으로 한 텍스트 어드벤처 게임의 AI 스토리 생성 서버입니다. OpenAI GPT 및 Anthropic Claude를 활용하여 역 정보와 캐릭터 상태에 기반한 맞춤형 스토리와 선택지를 생성합니다.
 
@@ -111,8 +111,6 @@ pip install -r requirements.txt
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-서버는 `http://localhost:8000`에서 실행됩니다.
-
 # 테스트 실행
 pytest
 pytest -v                    # Verbose 모드
@@ -138,8 +136,6 @@ GitHub Actions를 통한 자동 배포:
 1. `main` 브랜치에 push
 2. 자동으로 Docker 이미지 빌드
 3. EC2 서버에 배포 및 재시작
-
-자세한 내용은 `.github/workflows/deploy.yml` 참조
 
 ## 프로젝트 구조
 
@@ -237,33 +233,15 @@ async def generate_story(request: StoryRequest):
 - 캐시 히트율
 - LLM 응답 시간
 - Provider 실패율
-
-## 에러 처리
-
-### 400 Bad Request
-- 잘못된 요청 형식
-- 필수 필드 누락
-
-### 429 Too Many Requests
-- Rate Limit 초과
-
-### 500 Internal Server Error
-- LLM Provider 에러
-- Redis 연결 실패
-
-### 503 Service Unavailable
-- 모든 LLM Provider 실패
-
+- 
 ## 보안
 
 - API Key 환경 변수 관리
 - CORS 설정
-- 내부 API 인증 (Backend 간)
+- 내부 API 인증
 - Rate Limiting
 
 ## 아키텍처
-
-이 프로젝트는 멀티레포지토리 아키텍처를 사용합니다.
 
 - Frontend: Next.js 기반 UI 레이어
 - Backend: Spring Boot 기반 API 서버 및 비즈니스 로직
@@ -275,7 +253,3 @@ async def generate_story(request: StoryRequest):
 - [behindy-front](https://github.com/behindy3359/behindy-front) - Next.js 프론트엔드
 - [behindy-back](https://github.com/behindy3359/behindy-back) - Spring Boot 백엔드 API 서버
 - [behindy-ops](https://github.com/behindy3359/behindy-ops) - 인프라 관리 (PostgreSQL, Redis, Nginx)
-
-## 라이선스
-
-MIT License
