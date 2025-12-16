@@ -10,7 +10,6 @@
 - **Data Validation**: Pydantic 2.5 + pydantic-settings 2.1
 - **LLM Providers**: OpenAI 1.3 (GPT-4o-mini), Anthropic 0.7 (Claude 3 Haiku)
 - **HTTP Client**: aiohttp 3.9 (비동기), requests 2.31 (동기)
-- **Test**: pytest 7.4, pytest-asyncio 0.21, httpx 0.25
 
 ## 주요 기능
 
