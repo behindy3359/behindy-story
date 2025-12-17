@@ -4,12 +4,10 @@
 
 ## 기술 스택
 
-- **Framework**: FastAPI 0.104.1
-- **Language**: Python 3.11
-- **ASGI Server**: Uvicorn 0.24 (with standard extras)
-- **Data Validation**: Pydantic 2.5 + pydantic-settings 2.1
-- **LLM Providers**: OpenAI 1.3 (GPT-4o-mini), Anthropic 0.7 (Claude 3 Haiku)
-- **HTTP Client**: aiohttp 3.9 (비동기), requests 2.31 (동기)
+- **FastAPI** (Python 3.11)
+- **OpenAI GPT-4o-mini** - Primary LLM
+- **Anthropic Claude 3 Haiku** - Fallback LLM
+- **Redis** - 응답 캐싱
 
 ## 주요 기능
 
